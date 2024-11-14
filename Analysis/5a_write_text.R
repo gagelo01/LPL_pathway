@@ -8,6 +8,8 @@ source("Analysis/tosourcedrug.R")
 df_index <- fread("/mnt/sda/gagelo01/Vcffile/server_gwas_id.txt")
 
 #####
+inst <- fread("Data/Modified/inst.txt")
+dt_coloc <- fread("Data/Modified/dt_coloc.txt")
 res_multicis <- fread("Data/Modified/res_multicis_independent.txt")
 ctp <- fread("/mnt/sda/gagelo01/Projects/2024/UKB_phewas/Data/Modified/clinical_toxicity_panel.txt")
 dt_gene_region <- fread("Data/Modified/dt_gene_region.txt")
@@ -109,14 +111,47 @@ ztest_ondata <-function(data) { #id.exposure, id.outcome, b, se
 #######Abstract ########
 data_tsmr[id.outcome %in% ctp$id, length(unique(id.outcome))]
 data_tsmr[grepl("dis-26-", id.outcome), length(unique(id.outcome))]
-k <- data_tsmr[id.exposure %in% c("ANGPTL4_trait-16-39", "LPL_trait-16-39") & id.outcome == "dis-13-1", ] %>%
-ztest_ondata(.) 
-k$p_value %>% formatC(., format = "e", digits = 1)
-#########Results##########
-#para 1 
+# k <- data_tsmr[id.exposure %in% c("ANGPTL4_trait-16-39", "LPL_trait-16-39") & id.outcome == "dis-13-1", ] %>%
+# ztest_ondata(.) 
+# k$p_value %>% formatC(., format = "e", digits = 1)
+data_cox[toinclude==1,.N]
+cor(scatter[,.SD,.SDcols = colnom], method = c("pearson"))["b_ANGPTL4", "b_LPL"]
+##########Methods#############
+k<-df_index[id %in% res_multicis[!grepl("dis-26-|trait-33-", id.outcome), id.outcome], ]
+k[,.(id, clean_variable_name, ncase, ncontrol, sample_size)]
+df_index[id%in%"dis-24-4",]
+res_multicis[grepl("dis-26-", id.outcome), unique(id.outcome)]
+df_index[grepl("dis-26-", id), max(as.numeric(sample_size))]
+df_index[id%in%"trait-19-5",]
+df_index[id%in%"trait-16-37"]
+data_cox[T2D_toinclude==1, sum(T2D_censored)]
+data_cox[CAD_toinclude==1, sum(CAD_censored)]
+
+#sample overlap 
 data_tsmr[grepl("trait-16-39",id.exposure)& grepl("dis-", id.outcome),][!(grepl("dis-26-", id.outcome)),]
 data_tsmr[hgnc == "HMGCR" & grepl("dis-", id.outcome),][!(grepl("dis-26-", id.outcome)),]
 data_tsmr[hgnc == "PCSK9" & grepl("dis-", id.outcome),][!(grepl("dis-26-", id.outcome)),]
+add_fstat_rsq <- function(dat_exposure) {
+  inst<-data.table(dat_exposure)
+  inst <- TwoSampleMR::add_rsq(inst) %>% as.data.table(.)
+  if (all(is.na(inst$ncase.exposure) & is.na(inst$ncontrol.exposure))) { #This line should be changed for something more robust
+    n <- inst$samplesize.exposure
+  } else {
+    n <- TwoSampleMR::effective_n(ncase = inst$ncontrol.exposure, ncontrol = inst$ncase.exposure)
+  }
+  inst[,fstat := ((n-2)*rsq.exposure)/(1-rsq.exposure)]
+  return(inst)
+}
+
+inst <- add_fstat_rsq(inst)
+k <- inst[, mean(fstat), by = "id.exposure"]
+((1/k[,min(V1)])*0.5)*100
+((1/k[,max(V1)])*0.5)*100
+#########Results##########
+#para 1 
+inst[, .N,by = "id.exposure"]
+inst[, mean(fstat),by = "id.exposure"]
+inst[, sum(rsq.exposure),by = "id.exposure"]
 #para 2
 data <- data_tsmr[grepl("trait-16-39",id.exposure)& id.outcome %in% c("dis-24-4", "trait-19-5", "dis-13-1"),]
 b_diff <- ztest_ondata(data)
@@ -125,47 +160,22 @@ data_tsmr[id.exposure == "ANGPTL4_trait-16-39" & id.outcome %in% c("dis-24-4"), 
 data_tsmr[id.exposure == "ANGPTL4_trait-16-39" & id.outcome %in% c("trait-19-5"), ] %>% return_format_data_noexp
 data_tsmr[id.exposure == "ANGPTL4_trait-16-39" & id.outcome %in% c("dis-13-1"), ] %>% return_format_data
 data_tsmr[id.outcome %in% c("trait-10-3", "trait-1-1") & pval < 0.05,]
-#para3 
-cor(scatter[,.SD,.SDcols = colnom], method = c("pearson"))
+dt_coloc[grepl("trait-16-39",id.exposure)& id.outcome %in% c("dis-24-4", "dis-13-1") & !grepl("ANGPTL3", id.exposure), min(posprob_coloc_PPH3+posprob_coloc_PPH4)]
+dt_coloc[grepl("trait-16-39",id.exposure)& id.outcome %in% c("dis-13-1", "dis-24-4") & !grepl("ANGPTL3", id.exposure), ]
+#para 3
+dt_coloc[grepl("trait-16-39",id.exposure)& id.outcome %in% c("trait-19-5")]
 
-###para4
-data_ctp <- data_tsmr[id.outcome %in% ctp$id, ]
-data_ctp[,pvalfdr:=p.adjust(pval, method = "fdr"), by = "id.exposure"]
-data_ctp[is_bad_when == "pos", effect_interpretation := fifelse(b>0, "bad", "good")]
-data_ctp[is_bad_when == "neg", effect_interpretation := fifelse(b<0, "bad", "good")]
-data_ctp[is_bad_when == "sig", effect_interpretation := fifelse(pvalfdr<0.05, "bad", "neutral")]
-data_ctp[, effect_interpretation := fifelse(pvalfdr>0.05, "neutral", effect_interpretation)]
+######Metabolome-wide associations of genetically proxied LPL and LDLR pathway perturbation #########
+res_multicis[grepl("trait-33-", id.outcome) & method == "Inverse variance weighted" & pval < 0.05, .N, by="id.exposure"]
+cormet <- cor(scatter[,.SD,.SDcols = colnom], method = c("pearson"))
+cormet
+cormet[c("b_ANGPTL4", "b_APOC3", "b_LPL"),  c("b_HMGCR", "b_PCSK9")] %>% max
 
-data_ctp[effect_interpretation=="bad" & idscale == "trait-16-39", .(hgnc, clean_variable_name, id.outcome, b, se, pval, pvalfdr)][order(pval)]
-data_ctp[effect_interpretation=="good" & idscale == "trait-16-39", .(hgnc,category, clean_variable_name, id.outcome, b, se, pval, pvalfdr)][order(pval)]
-data_ctp[effect_interpretation=="good" & idscale == "trait-16-39" & category == "Liver", .(hgnc,category, clean_variable_name, id.outcome, b, se, pval, pvalfdr)][order(pval)]
+#### LDLR and LPL pathways drug target interaction ######
+k <- res_continuous[cov_inc== "+ age_enrollment + sex + PCA1 + PCA2 + PCA3 + PCA4 + PCA5 + PCA6 + PCA7 + PCA8 + PCA9 + PCA10" &!grepl("\\*", IV) & grepl("^PRS", exposure), ]
+k[outcome == "LDL_direct"& grepl("PCSK9|HMGCR", exposure), max(pval)]
+k[outcome == "Triglycerides" & grepl("ANGPTL3|ANGPTL4|APOC3|LPL", exposure), max(pval)]
 
-###para5
-ntest<- data_tsmr[grepl("dis-26-", id.outcome), unique(clean_variable_name) %>% length]
-phewas <- data_tsmr[grepl("dis-26-", id.outcome) & method == "Inverse variance weighted", ]
-phewas[,unique(id.outcome) %>% length]
-idtosel <- phewas[idscale=="trait-16-39" & b<0 & pval < 0.05/ntest, .N, by = "id.outcome"][N==3, id.outcome] #super concordant ID
-phewas[idscale=="trait-16-39" & id.outcome %in% idtosel, ]
-phewas[idscale=="trait-16-39" & id.outcome == "dis-26-5", ] %>% return_format_data
-
-phewas[idscale=="trait-16-39" & b>0 & pval < 0.05/ntest, ]
-phewas[hgnc == "LPL" & id.outcome == "dis-26-174", ] %>% return_format_data
-phewas[idscale=="trait-16-39" & b>0 & pval < 0.05/ntest, ][, .SD[which.min(pval)], by = "id.exposure"] %>% return_format_data
-phewas[idscale=="trait-16-39" & b>0 & pval < 0.05/ntest, ][id.outcome =="dis-26-1077", ] %>% return_format_data
-
-phewas[hgnc=="ANGPTL4" & b>0 & pval < 0.05/10, ][which.min(pval), ] %>% return_format_data
-phewas[hgnc=="APOC3" & b>0 & pval < 0.05/10, ][order(pval)][clean_variable_name == "Idiopathic pulmonary fibrosis", ] %>% return_format_data
-phewas[hgnc=="PCSK9" & b>0 & pval < 0.05/10, ][which.min(pval), ] %>% return_format_data
-
-inst <-fread("Data/Modified/inst.txt")
-k<- inst[id.exposure == "LPL_trait-16-39", ]
-gwasvcf::set_bcftools()
-gwasvcf::set_plink()
-outr<-GagnonMR::extract_outcome_variant(snps = k$SNP, outcomes = "/mnt/sda/gagelo01/Vcffile/Server_vcf/dis-4-1/dis-4-1.vcf.gz", rsq = parameters$proxy_rsq, parameters = parameters)
-harm <- TwoSampleMR::harmonise_data(k, outr, 1)
-res <- GagnonMR::all_mr_methods(harm)
-res[method == "Inverse variance weighted"] %>% return_format_data()
-##para6
 k <- res_cox_small[!grepl("\\*", IV) & grepl("^PRS", exposure) & pval < 0.05,]
 k[outcome == "CAD"]
 k[outcome == "T2D"]
@@ -207,13 +217,46 @@ b_diff <- ztest_ondata(data)
 b_diff[grepl("trait_16_4|lpl", V1) & grepl("trait_16_4|lpl", V2) & p_value<0.05,]
 b_diff[grepl("trait_16_2|ldlr", V1) & grepl("trait_16_2|ldlr", V2) & p_value<0.05,]
 
-##########Methods#############
-k<-df_index[id %in% res_multicis[!grepl("dis-26-|trait-33-", id.outcome), id.outcome], ]
-k[,.(id, clean_variable_name, ncase, ncontrol, sample_size)]
-df_index[id%in%"dis-24-4",]
-res_multicis[grepl("dis-26-", id.outcome), unique(id.outcome)]
-df_index[grepl("dis-26-", id), max(as.numeric(sample_size))]
-df_index[id%in%"trait-19-5",]
+######Assessment of secondary indications and adverse effects###########
+###para4
+data_ctp <- data_tsmr[id.outcome %in% ctp$id, ]
+data_ctp[,pvalfdr:=p.adjust(pval, method = "fdr"), by = "id.exposure"]
+data_ctp[is_bad_when == "pos", effect_interpretation := fifelse(b>0, "bad", "good")]
+data_ctp[is_bad_when == "neg", effect_interpretation := fifelse(b<0, "bad", "good")]
+data_ctp[is_bad_when == "sig", effect_interpretation := fifelse(pvalfdr<0.05, "bad", "neutral")]
+data_ctp[, effect_interpretation := fifelse(pvalfdr>0.05, "neutral", effect_interpretation)]
+
+data_ctp[effect_interpretation=="bad" & idscale == "trait-16-39", .(hgnc, clean_variable_name, id.outcome, b, se, pval, pvalfdr)][order(pval)]
+data_ctp[effect_interpretation=="good" & idscale == "trait-16-39", .(hgnc,category, clean_variable_name, id.outcome, b, se, pval, pvalfdr)][order(pval)]
+data_ctp[effect_interpretation=="good" & idscale == "trait-16-39" & category == "Liver", .(hgnc,category, clean_variable_name, id.outcome, b, se, pval, pvalfdr)][order(pval)]
+
+###para5
+ntest<- data_tsmr[grepl("dis-26-", id.outcome), unique(clean_variable_name) %>% length]
+phewas <- data_tsmr[grepl("dis-26-", id.outcome) & method == "Inverse variance weighted", ]
+phewas[,unique(id.outcome) %>% length]
+idtosel <- phewas[idscale=="trait-16-39" & b<0 & pval < 0.05/ntest, .N, by = "id.outcome"][N==3, id.outcome] #super concordant ID
+phewas[idscale=="trait-16-39" & id.outcome %in% idtosel, ]
+phewas[idscale=="trait-16-39" & id.outcome == "dis-26-5", ] %>% return_format_data
+
+phewas[idscale=="trait-16-39" & b>0 & pval < 0.05/ntest, ]
+phewas[hgnc == "LPL" & id.outcome == "dis-26-174", ] %>% return_format_data
+phewas[idscale=="trait-16-39" & b>0 & pval < 0.05/ntest, ][, .SD[which.min(pval)], by = "id.exposure"] %>% return_format_data
+phewas[idscale=="trait-16-39" & b>0 & pval < 0.05/ntest, ][id.outcome =="dis-26-1077", ] %>% return_format_data
+
+phewas[hgnc=="ANGPTL3" & b>0 & pval < 0.05/10, ][which.min(pval), ] %>% return_format_data
+phewas[hgnc=="ANGPTL4" & b>0 & pval < 0.05/10, ][which.min(pval), ] %>% return_format_data
+phewas[hgnc=="APOC3" & b>0 & pval < 0.05/10, ][order(pval)][clean_variable_name == "Idiopathic pulmonary fibrosis", ] %>% return_format_data
+phewas[hgnc=="PCSK9" & b>0 & pval < 0.05/10, ][which.min(pval), ] %>% return_format_data
+
+inst <-fread("Data/Modified/inst.txt")
+k<- inst[id.exposure == "LPL_trait-16-39", ]
+gwasvcf::set_bcftools()
+gwasvcf::set_plink()
+outr<-GagnonMR::extract_outcome_variant(snps = k$SNP, outcomes = "/mnt/sda/gagelo01/Vcffile/Server_vcf/dis-4-1/dis-4-1.vcf.gz", rsq = parameters$proxy_rsq, parameters = parameters)
+harm <- TwoSampleMR::harmonise_data(k, outr, 1)
+res <- GagnonMR::all_mr_methods(harm)
+res[method == "Inverse variance weighted"] %>% return_format_data()
+
 
 #######Discussion##########
 # prar 1
@@ -229,3 +272,11 @@ data_tsmr[hgnc == "ANGPTL4" & id.outcome == "dis-13-1", ] %>% return_format_data
 data_tsmr[hgnc == "LPL" & id.outcome == "dis-13-1", ] %>% return_format_data()
 ztest_ondata(data_tsmr[hgnc %in% c("ANGPTL4", "LPL") & id.outcome == "dis-13-1", ])[,p_value] %>% formatC(., format = "e", digits = 1)
 
+#para 4
+data_tsmr[hgnc %in% c("ANGPTL3", "LPL") & id.outcome == "trait-33-5", ] %>% return_format_data_noexp()
+
+#para6
+colnom <- res_continuous[grepl("^PRS", exposure)&!grepl("\\*", IV),c(exposure,outcome)%>% unique]
+dat <- fread("Data/Modified/data_cox.txt")
+test <- dat[, .SD,.SDcols = colnom] %>% cor(., use = "complete.obs")
+test[c("LDL_direct","Triglycerides"), grepl("^PRS", colnames(test))] ^2
