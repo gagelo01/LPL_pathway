@@ -28,9 +28,8 @@ parameters$path <- c(GagnonMR::default_param()$path, paste0(wd, "/Data/Modified/
 parameters$uni_cis_minpval <- 1
 parameters$ldref <- ldref
 parameters$snp_bim <- dt_ref_snp$V1 #I only include SNP in 1000G with maf > 0.01
-parameters$multicis_clumping["clump_r2"]<-0.6
 ##########Choose the gene you wish to include##########
-gene_toinclude <- c("LPL", "ANGPTL4", "APOC3", "PCSK9", "HMGCR")
+gene_toinclude <- c("LPL", "ANGPTL4", "APOC3", "ANGPTL3", "PCSK9", "HMGCR")
 should_QTL_instrument_selection<-FALSE
 thewindow<-1e5
 typeof_sel<- "multicis_independent_clumping"
@@ -60,7 +59,7 @@ out_mrbase<-NULL
 k <- fread("/mnt/sda/gagelo01/Projects/small_MR_exploration/Test_potential_project/Tribal/Data/Modified/dt_gene_region.txt")
 k <- k[hgnc%in%gene_toinclude, ]
 k[, gene_region := paste0(chr, ":", (start-thewindow)%>%ifelse(.<1, 1, .), "-", (end+thewindow))]
-k[hgnc %in% c("LPL", "ANGPTL4", "APOC3"), ID:= df_index[grepl("glgc", tolower(consortium)) & clean_variable_name == "Triglyceride" & sex == "Males and Females" & population == "Mixed"& consortium == "GLGC", ]$id]
+k[hgnc %in% c("LPL", "ANGPTL4", "APOC3", "ANGPTL3"), ID:= df_index[grepl("glgc", tolower(consortium)) & clean_variable_name == "Triglyceride" & sex == "Males and Females" & population == "Mixed"& consortium == "GLGC", ]$id]
 k[hgnc %in% c("PCSK9", "HMGCR"), ID:= df_index[grepl("glgc", tolower(consortium)) & clean_variable_name == "LDL cholesterol" & sex == "Males and Females" & population == "Mixed"& consortium == "GLGC", ]$id]
 arguments_exposure_proxies <- unique(k[,.(hgnc, ID, gene_region)])
 arguments_exposure_proxies[, vcffile_inst := paste0("/mnt/sda/gagelo01/Vcffile/Server_vcf/", ID, "/", ID, ".vcf.gz")]
